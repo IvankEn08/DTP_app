@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}{{ accident.title }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1 class="h3 mb-2">{{ accident.title }}</h1>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            {% if accident.is_submitted %}
+                <span class="badge text-bg-success">Отправлено в ГИБДД</span>
+            {% else %}
+                <span class="badge text-bg-secondary">Не отправлено</span>
+            {% endif %}
+            <span class="access-code">Код свидетеля: {{ accident.access_code }}</span>
+            {% if accident.submitted_at %}
+                <span class="text-muted small">Отправлено в ГИБДД: {{ accident.submitted_at|date:"d.m.Y H:i" }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        {% if can_edit %}
+            <a class="btn btn-outline-primary" href="{% url 'accidents:edit' accident.pk %}">Редактировать ДТП</a>
+            <a class="btn btn-outline-danger" href="{% url 'accidents:delete' accident.pk %}">Удалить</a>
+        {% endif %}
+        {% if can_submit %}
+            <a class="btn btn-success" href="{% url 'accidents:submit_confirm' accident.pk %}">Отправить в ГИБДД</a>
+        {% endif %}
+    </div>
+</div>
+
+{% if accident.is_submitted %}
+    <div class="alert alert-info">ДТП отправлено в ГИБДД. Редактирование данных через личный кабинет заблокировано.</div>
+{% elif submit_blocker %}
+    <div class="alert alert-warning">{{ submit_blocker }}</div>
+{% endif %}
+
+<section class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5">Общие сведения</h2>
+        <dl class="row mb-0">
+            <dt class="col-sm-3">Дата и время</dt>
+            <dd class="col-sm-9">{{ accident.accident_date|date:"d.m.Y H:i" }}</dd>
+            <dt class="col-sm-3">Место</dt>
+            <dd class="col-sm-9">{{ accident.location }}</dd>
+            <dt class="col-sm-3">Создатель</dt>
+            <dd class="col-sm-9">{{ accident.created_by.username }}</dd>
+        </dl>
+    </div>
+</section>
+
+{% if current_participant and not accident.is_submitted %}
+<section class="card mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+            <div>
+                <h2 class="h5 mb-1">Мой блок заполнения</h2>
+                <p class="text-muted mb-0">Роль: {{ current_participant.get_role_display }}. Подтверждайте готовность только после проверки своих данных.</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-outline-primary" href="{% url 'accidents:driver_comment_edit' accident.pk %}">Мой комментарий</a>
+                <form method="post" action="{% url 'accidents:driver_ready_toggle' accident.pk %}">
+                    {% csrf_token %}
+                    {% if current_participant.is_ready %}
+                        <button class="btn btn-outline-warning" type="submit">Снять подтверждение</button>
+                    {% else %}
+                        <button class="btn btn-success" type="submit">Я всё заполнил</button>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<section class="mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 mb-0">Водители-участники</h2>
+        {% if can_manage_drivers %}
+            <a class="btn btn-sm btn-outline-primary" href="{% url 'accidents:driver_add' accident.pk %}">Добавить второго водителя</a>
+        {% endif %}
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+            <tr>
+                <th>ФИО</th>
+                <th>Телефон</th>
+                <th>ВУ</th>
+                <th>Роль</th>
+                <th>Готовность</th>
+                <th>Комментарий</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for participant in drivers %}
+                <tr>
+                    <td>{{ participant.driver.full_name }}</td>
+                    <td>{{ participant.driver.phone }}</td>
+                    <td>{{ participant.driver.driver_license_number }}</td>
+                    <td>
+                        {% if participant.role == "responsible" %}
+                            <span class="badge text-bg-warning">{{ participant.get_role_display }}</span>
+                        {% else %}
+                            <span class="badge text-bg-info">{{ participant.get_role_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if participant.is_ready %}
+                            <span class="badge text-bg-success">Подтверждено</span>
+                            <div class="text-muted small">{{ participant.ready_at|date:"d.m.Y H:i" }}</div>
+                        {% else %}
+                            <span class="badge text-bg-secondary">Не подтверждено</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ participant.comment|linebreaksbr|default:"—" }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="6" class="text-muted">Участники пока не добавлены.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 mb-0">Автомобили и повреждения</h2>
+        {% if can_modify_data %}
+            <div class="d-flex gap-2">
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'accidents:vehicle_add' accident.pk %}">Добавить автомобиль</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'accidents:damage_add' accident.pk %}">Добавить повреждение</a>
+            </div>
+        {% endif %}
+    </div>
+    {% for vehicle in vehicles %}
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between gap-2">
+                    <div>
+                        <h3 class="h6 mb-1">{{ vehicle.brand }} {{ vehicle.model }}, {{ vehicle.year }}</h3>
+                        <div class="text-muted small">Госномер: {{ vehicle.license_plate }} · VIN: {{ vehicle.vin }} · Полис ОСАГО: {{ vehicle.insurance_policy }}</div>
+                        <div class="text-muted small">Владелец: {{ vehicle.owner.full_name }}</div>
+                    </div>
+                </div>
+                <hr>
+                <h4 class="h6">Повреждения</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                        <tr>
+                            <th>Область</th>
+                            <th>Степень</th>
+                            <th>Описание</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for damage in vehicle.damages.all %}
+                            <tr>
+                                <td>{{ damage.damage_area }}</td>
+                                <td>{{ damage.get_severity_display }}</td>
+                                <td>{{ damage.description }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="3" class="text-muted">Повреждения для этого автомобиля не добавлены.</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    {% empty %}
+        <div class="alert alert-light border">Автомобили пока не добавлены.</div>
+    {% endfor %}
+</section>
+
+<section class="mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 mb-0">Фотографии ДТП</h2>
+        {% if can_modify_data %}
+            <a class="btn btn-sm btn-outline-primary" href="{% url 'accidents:photo_add' accident.pk %}">Загрузить фото</a>
+        {% endif %}
+    </div>
+    <div class="row g-3">
+        {% for photo in photos %}
+            <div class="col-md-6 col-lg-4">
+                <div class="card h-100">
+                    <img class="card-img-top photo-thumb" src="{{ photo.image.url }}" alt="{{ photo.description|default:'Фотография ДТП' }}">
+                    <div class="card-body">
+                        <p class="mb-1">{{ photo.description|default:"Без описания" }}</p>
+                        <div class="text-muted small">
+                            {% if photo.vehicle %}{{ photo.vehicle }} · {% endif %}{{ photo.uploaded_by.username }} · {{ photo.created_at|date:"d.m.Y H:i" }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% empty %}
+            <div class="col-12"><div class="alert alert-light border mb-0">Фотографии пока не загружены.</div></div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="mb-4">
+    <h2 class="h5 mb-3">Свидетельские показания</h2>
+    {% for statement in witness_statements %}
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                    <h3 class="h6 mb-0">{{ statement.witness_full_name }}</h3>
+                    <span class="text-muted small">{{ statement.created_at|date:"d.m.Y H:i" }}</span>
+                </div>
+                <div class="text-muted small mb-2">Телефон: {{ statement.witness_phone }}</div>
+                <p class="mb-3">{{ statement.statement_text|linebreaksbr }}</p>
+                {% if statement.photo %}
+                    <img class="witness-photo" src="{{ statement.photo.url }}" alt="Фото свидетеля">
+                {% endif %}
+            </div>
+        </div>
+    {% empty %}
+        <div class="alert alert-light border">Показания свидетелей пока не поступали.</div>
+    {% endfor %}
+</section>
+
+{% if submission_logs %}
+<section>
+    <h2 class="h5 mb-3">Журнал отправки</h2>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+            <tr>
+                <th>Дата</th>
+                <th>Пользователь</th>
+                <th>Комментарий</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for log in submission_logs %}
+                <tr>
+                    <td>{{ log.submitted_at|date:"d.m.Y H:i" }}</td>
+                    <td>{{ log.submitted_by.username }}</td>
+                    <td>{{ log.comment }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

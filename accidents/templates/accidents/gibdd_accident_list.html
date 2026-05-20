@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Все ДТП ГИБДД{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1 class="h3 mb-1">Все ДТП</h1>
+        <p class="text-muted mb-0">Список карточек ДТП, доступных сотруднику ГИБДД.</p>
+    </div>
+    <form method="get" class="d-flex flex-wrap gap-2 align-items-center">
+        <label class="form-label mb-0" for="sort">Сортировка</label>
+        <select class="form-select" id="sort" name="sort">
+            {% for value, label in sort_options %}
+                <option value="{{ value }}" {% if value == selected_sort %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary" type="submit">Применить</button>
+    </form>
+</div>
+
+<section>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+            <tr>
+                <th>Название</th>
+                <th>Дата ДТП</th>
+                <th>Место</th>
+                <th>Создатель</th>
+                <th>Участники</th>
+                <th>Фото</th>
+                <th>Статус</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for accident in accidents %}
+                <tr>
+                    <td>{{ accident.title }}</td>
+                    <td>{{ accident.accident_date|date:"d.m.Y H:i" }}</td>
+                    <td>{{ accident.location }}</td>
+                    <td>{{ accident.created_by.username }}</td>
+                    <td>{{ accident.drivers.count }}</td>
+                    <td>{{ accident.photos.count }}</td>
+                    <td>
+                        {% if accident.is_submitted %}
+                            <span class="badge text-bg-success">Отправлено в ГИБДД</span>
+                            <div class="text-muted small">{{ accident.submitted_at|date:"d.m.Y H:i" }}</div>
+                        {% else %}
+                            <span class="badge text-bg-secondary">Не отправлено</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'accidents:detail' accident.pk %}">Открыть карточку</a>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="8" class="text-muted">ДТП пока нет.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
