@@ -14,6 +14,16 @@
                 <form method="post" novalidate>
                     {% csrf_token %}
                     {% for field in form %}
+                        {% if field.name == "username" %}
+                            <h2 class="h5 mb-3">Аккаунт и водитель</h2>
+                        {% elif field.name == "vehicle_owner_name" %}
+                            <hr>
+                            <h2 class="h5 mb-3">Первая машина</h2>
+                            <p class="text-muted">Укажите данные хотя бы одного автомобиля. Позже эту машину можно будет выбрать при создании ДТП.</p>
+                        {% elif field.name == "password1" %}
+                            <hr>
+                            <h2 class="h5 mb-3">Пароль</h2>
+                        {% endif %}
                         <div class="mb-3">
                             <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                             {{ field }}

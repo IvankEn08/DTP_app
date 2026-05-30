@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Добавление машины в профиль{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="page-heading mb-3">
+            <h1 class="h3 mb-1">Добавление машины в профиль</h1>
+            <p class="text-muted mb-0">Эту машину можно будет выбрать при создании новой карточки ДТП.</p>
+        </div>
+        <div class="card">
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            {{ field }}
+                            {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                        </div>
+                    {% endfor %}
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary" type="submit">Добавить машину</button>
+                        <a class="btn btn-outline-secondary" href="{% url 'accidents:accident_list' %}">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
