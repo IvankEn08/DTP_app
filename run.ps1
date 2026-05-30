@@ -5,10 +5,6 @@ Set-Location $ProjectRoot
 
 $VenvPython = Join-Path $ProjectRoot "venv\Scripts\python.exe"
 
-if (-not (Test-Path $VenvPython)) {
-    py -m venv venv
-}
-
 & $VenvPython -m pip install --upgrade pip
 & $VenvPython -m pip install -r requirements.txt
 
