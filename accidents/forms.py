@@ -1,38 +1,7 @@
-import re
-
 from django import forms
 
-from users.models import DriverProfile
+from users.models import DriverVehicle
 from .models import Accident, AccidentDriver, AccidentPhoto, Damage, Vehicle, WitnessStatement
-
-
-PLATE_TRANSLATION = str.maketrans(
-    {
-        "A": "А",
-        "B": "В",
-        "E": "Е",
-        "K": "К",
-        "M": "М",
-        "H": "Н",
-        "O": "О",
-        "P": "Р",
-        "C": "С",
-        "T": "Т",
-        "Y": "У",
-        "X": "Х",
-    }
-)
-LICENSE_PLATE_RE = re.compile(r"^[АВЕКМНОРСТУХ]\d{3}[АВЕКМНОРСТУХ]{2}\d{2,3}$")
-VIN_RE = re.compile(r"^[0-9A-HJ-NPR-Z]{17}$")
-INSURANCE_POLICY_RE = re.compile(r"^[А-ЯЁ]{3}\d{10}$")
-
-
-def normalize_plate_like_value(value):
-    return re.sub(r"[\s-]+", "", value).upper().translate(PLATE_TRANSLATION)
-
-
-def normalize_vin(value):
-    return re.sub(r"[\s-]+", "", value).upper()
 
 
 class BootstrapFormMixin:
@@ -42,6 +11,8 @@ class BootstrapFormMixin:
                 field.widget.attrs.setdefault("class", "form-check-input")
             elif isinstance(field.widget, forms.FileInput):
                 field.widget.attrs.setdefault("class", "form-control")
+            elif isinstance(field.widget, forms.RadioSelect):
+                continue
             else:
                 field.widget.attrs.setdefault("class", "form-control")
 
@@ -83,21 +54,25 @@ class AccidentUpdateForm(BootstrapFormMixin, forms.ModelForm):
         self.apply_bootstrap()
 
 
-class AccidentDriverForm(BootstrapFormMixin, forms.ModelForm):
-    driver = forms.ModelChoiceField(label="Второй водитель", queryset=DriverProfile.objects.none())
+class AccidentDriverForm(BootstrapFormMixin, forms.Form):
     role = forms.ChoiceField(label="Роль второго водителя", choices=AccidentDriver.Role.choices)
-
-    class Meta:
-        model = AccidentDriver
-        fields = ("driver", "role")
 
     def __init__(self, *args, accident=None, **kwargs):
         super().__init__(*args, **kwargs)
-        queryset = DriverProfile.objects.all()
-        if accident:
-            queryset = queryset.exclude(accident_roles__accident=accident)
-        self.fields["driver"].queryset = queryset
+        self.accident = accident
         self.apply_bootstrap()
+
+
+class DriverJoinCodeForm(BootstrapFormMixin, forms.Form):
+    driver_join_code = forms.CharField(label="Код второго водителя", max_length=8)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["driver_join_code"].widget.attrs.update({"placeholder": "Например, D1R2V3R4"})
+        self.apply_bootstrap()
+
+    def clean_driver_join_code(self):
+        return self.cleaned_data["driver_join_code"].strip().upper()
 
 
 class DriverCommentForm(BootstrapFormMixin, forms.ModelForm):
@@ -114,38 +89,50 @@ class DriverCommentForm(BootstrapFormMixin, forms.ModelForm):
 
 
 class VehicleForm(BootstrapFormMixin, forms.ModelForm):
-    owner = forms.ModelChoiceField(label="Владелец", queryset=DriverProfile.objects.none())
+    registered_vehicle = forms.ModelChoiceField(
+        label="Автомобиль",
+        queryset=DriverVehicle.objects.none(),
+        empty_label="Выберите автомобиль",
+    )
 
     class Meta:
         model = Vehicle
-        fields = ("owner", "brand", "model", "year", "license_plate", "vin", "insurance_policy")
+        fields = ()
 
-    def __init__(self, *args, owners_queryset=None, **kwargs):
+    def __init__(self, *args, owner_profile=None, **kwargs):
         super().__init__(*args, **kwargs)
-        if owners_queryset is not None:
-            self.fields["owner"].queryset = owners_queryset
-        self.fields["license_plate"].widget.attrs.update({"placeholder": "А123ВС77"})
-        self.fields["vin"].widget.attrs.update({"placeholder": "17 символов без I, O, Q"})
-        self.fields["insurance_policy"].widget.attrs.update({"placeholder": "ЕЕЕ1234567890"})
+        self.owner_profile = owner_profile
+        self.selected_registered_vehicle = None
+        if owner_profile is not None:
+            self.fields["registered_vehicle"].queryset = owner_profile.registered_vehicles.all()
         self.apply_bootstrap()
 
-    def clean_license_plate(self):
-        value = normalize_plate_like_value(self.cleaned_data["license_plate"])
-        if not LICENSE_PLATE_RE.match(value):
-            raise forms.ValidationError("Введите госномер в формате А123ВС77 или А123ВС777. Допустимы буквы А, В, Е, К, М, Н, О, Р, С, Т, У, Х.")
-        return value
+    def clean(self):
+        cleaned_data = super().clean()
+        registered_vehicle = cleaned_data.get("registered_vehicle")
+        if registered_vehicle is None:
+            self.add_error("registered_vehicle", "Выберите автомобиль из своего профиля.")
+        elif self.owner_profile and registered_vehicle.driver_id != self.owner_profile.id:
+            self.add_error("registered_vehicle", "Для ДТП можно выбрать только автомобиль из своего профиля.")
+        else:
+            self.selected_registered_vehicle = registered_vehicle
+        return cleaned_data
 
-    def clean_vin(self):
-        value = normalize_vin(self.cleaned_data["vin"])
-        if not VIN_RE.match(value):
-            raise forms.ValidationError("VIN должен состоять из 17 латинских букв и цифр без I, O, Q.")
-        return value
-
-    def clean_insurance_policy(self):
-        value = normalize_plate_like_value(self.cleaned_data["insurance_policy"])
-        if not INSURANCE_POLICY_RE.match(value):
-            raise forms.ValidationError("Введите полис ОСАГО в формате: 3 буквы серии и 10 цифр номера, например ЕЕЕ1234567890.")
-        return value
+    def save(self, commit=True):
+        source = self.selected_registered_vehicle
+        vehicle = Vehicle(
+            owner=source.driver,
+            owner_name=source.owner_name,
+            brand=source.brand,
+            model=source.model,
+            year=source.year,
+            license_plate=source.license_plate,
+            vin=source.vin,
+            insurance_policy=source.insurance_policy,
+        )
+        if commit:
+            vehicle.save()
+        return vehicle
 
 
 class DamageForm(BootstrapFormMixin, forms.ModelForm):
