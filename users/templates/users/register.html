@@ -3,41 +3,43 @@
 {% block title %}Регистрация водителя{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-7 col-xl-6">
-        <div class="page-heading mb-3">
-            <h1 class="h3 mb-1">Регистрация водителя</h1>
-            <p class="text-muted mb-0">Создайте аккаунт и профиль водителя для работы с ДТП.</p>
-        </div>
-        <div class="card">
-            <div class="card-body">
-                <form method="post" novalidate>
-                    {% csrf_token %}
-                    {% for field in form %}
-                        {% if field.name == "username" %}
-                            <h2 class="h5 mb-3">Аккаунт и водитель</h2>
-                        {% elif field.name == "vehicle_owner_name" %}
-                            <hr>
-                            <h2 class="h5 mb-3">Первая машина</h2>
-                            <p class="text-muted">Укажите данные хотя бы одного автомобиля. Позже эту машину можно будет выбрать при создании ДТП.</p>
-                        {% elif field.name == "password1" %}
-                            <hr>
-                            <h2 class="h5 mb-3">Пароль</h2>
-                        {% endif %}
-                        <div class="mb-3">
-                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                            {{ field }}
-                            {% if field.help_text %}<div class="form-text">{{ field.help_text|safe }}</div>{% endif %}
-                            {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-                        </div>
-                    {% endfor %}
-                    {% if form.non_field_errors %}
-                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
-                    {% endif %}
-                    <button class="btn btn-primary w-100" type="submit">Зарегистрироваться</button>
-                </form>
-            </div>
-        </div>
+<div class="app-screen app-screen-wide">
+    <div class="screen-topbar">
+        <a class="back-link" href="{% url 'accidents:home' %}" aria-label="Назад">←</a>
+        <a class="topbar-action" href="{% url 'accidents:home' %}">Отменить</a>
     </div>
+
+    <h1 class="screen-title">Регистрация</h1>
+    <p class="screen-subtitle">Создайте аккаунт, профиль водителя и первую машину.</p>
+
+    <form method="post" novalidate class="form-flow">
+        {% csrf_token %}
+        <section class="input-panel">
+            {% for field in form %}
+                {% if field.name == "username" %}
+                    <h2 class="h6 fw-bold mb-3">Аккаунт и водитель</h2>
+                {% elif field.name == "vehicle_owner_name" %}
+                    </section>
+                    <section class="input-panel">
+                    <h2 class="h6 fw-bold mb-2">Первая машина</h2>
+                    <p class="text-muted mb-3">Эту машину можно будет выбрать при создании ДТП.</p>
+                {% elif field.name == "password1" %}
+                    </section>
+                    <section class="input-panel">
+                    <h2 class="h6 fw-bold mb-3">Пароль</h2>
+                {% endif %}
+                <div class="mb-3">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}<div class="form-text">{{ field.help_text|safe }}</div>{% endif %}
+                    {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                </div>
+            {% endfor %}
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+        </section>
+        <button class="btn btn-primary btn-action" type="submit">Зарегистрироваться <span>→</span></button>
+    </form>
 </div>
 {% endblock %}

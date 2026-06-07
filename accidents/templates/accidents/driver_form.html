@@ -6,8 +6,11 @@
 <div class="row justify-content-center">
     <div class="col-lg-7">
         <div class="page-heading mb-3">
-            <h1 class="h3 mb-1">Добавление второго водителя</h1>
-            <p class="text-muted mb-0">Выберите зарегистрированного водителя и его роль. Первый участник автоматически получит противоположную роль.</p>
+            <h1 class="h3 mb-1">Код для второго водителя</h1>
+            <p class="text-muted mb-0">Выберите роль второго водителя. После сохранения передайте ему код, который он введёт в своём личном кабинете.</p>
+        </div>
+        <div class="alert alert-info">
+            Код второго водителя: <span class="access-code">{{ accident.driver_join_code }}</span>
         </div>
         <div class="card">
             <div class="card-body">
@@ -21,7 +24,7 @@
                         </div>
                     {% endfor %}
                     <div class="d-flex gap-2">
-                        <button class="btn btn-primary" type="submit">Добавить водителя</button>
+                        <button class="btn btn-primary" type="submit">Сохранить роль и код</button>
                         <a class="btn btn-outline-secondary" href="{% url 'accidents:detail' accident.pk %}">Отмена</a>
                     </div>
                 </form>

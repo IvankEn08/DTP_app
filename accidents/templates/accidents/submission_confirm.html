@@ -58,7 +58,7 @@
         <div class="card mb-3">
             <div class="card-body">
                 <h3 class="h6">{{ vehicle.brand }} {{ vehicle.model }} {{ vehicle.year }} — {{ vehicle.license_plate }}</h3>
-                <p class="text-muted small mb-2">Владелец: {{ vehicle.owner.full_name }} · VIN: {{ vehicle.vin }} · Полис ОСАГО: {{ vehicle.insurance_policy }}</p>
+                <p class="text-muted small mb-2">Водитель: {{ vehicle.owner.full_name }} · Владелец: {{ vehicle.display_owner_name }} · VIN: {{ vehicle.vin }} · Полис ОСАГО: {{ vehicle.insurance_policy }}</p>
                 <div class="table-responsive">
                     <table class="table table-sm mb-0">
                         <thead><tr><th>Область</th><th>Степень</th><th>Описание</th></tr></thead>
@@ -80,20 +80,24 @@
 
 <section class="mb-4">
     <h2 class="h5 mb-3">Фотографии ДТП</h2>
-    <div class="row g-3">
-        {% for photo in photos %}
-            <div class="col-md-4">
-                <div class="card h-100">
-                    <img class="card-img-top photo-thumb" src="{{ photo.image.url }}" alt="{{ photo.description|default:'Фотография ДТП' }}">
+    {% if photos %}
+        <div class="photo-grid">
+            {% for photo in photos %}
+                <article class="card photo-card">
+                    <img src="{{ photo.image.url }}" alt="{{ photo.description|default:'Фотография ДТП' }}">
                     <div class="card-body">
-                        <p class="mb-0">{{ photo.description|default:"Без описания" }}</p>
+                        <h3 class="h6 mb-1">{{ photo.description|default:"Фото ДТП" }}</h3>
+                        <div class="text-muted small">
+                            {% if photo.vehicle %}{{ photo.vehicle.brand }} {{ photo.vehicle.model }} · {% endif %}
+                            {{ photo.uploaded_by.username }} · {{ photo.created_at|date:"d.m.Y H:i" }}
+                        </div>
                     </div>
-                </div>
-            </div>
-        {% empty %}
-            <div class="col-12"><div class="alert alert-light border">Фотографии не загружены.</div></div>
-        {% endfor %}
-    </div>
+                </article>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="alert alert-light border">Фотографии не добавлены.</div>
+    {% endif %}
 </section>
 
 <section class="mb-4">
@@ -105,7 +109,7 @@
                 <p class="text-muted small">Телефон: {{ statement.witness_phone }} · {{ statement.created_at|date:"d.m.Y H:i" }}</p>
                 <p>{{ statement.statement_text|linebreaksbr }}</p>
                 {% if statement.photo %}
-                    <img class="witness-photo" src="{{ statement.photo.url }}" alt="Фото свидетеля">
+                    <img class="witness-photo" src="{{ statement.photo.url }}" alt="Фото свидетеля {{ statement.witness_full_name }}">
                 {% endif %}
             </div>
         </div>

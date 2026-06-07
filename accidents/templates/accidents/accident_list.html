@@ -8,11 +8,50 @@
         <h1 class="h3 mb-1">Личный кабинет водителя</h1>
         <p class="text-muted mb-0">Здесь отображаются созданные вами ДТП и происшествия, где вы указаны участником.</p>
     </div>
-    <a class="btn btn-primary" href="{% url 'accidents:create' %}">Создать ДТП</a>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'accidents:driver_certificate' %}">Экспорт истории ДТП в PDF</a>
+        <a class="btn btn-primary" href="{% url 'accidents:create' %}">Создать ДТП</a>
+    </div>
 </div>
 
 {% if not profile %}
     <div class="alert alert-warning">У вашей учетной записи нет профиля водителя. Зарегистрируйте водительский аккаунт, чтобы создавать и заполнять ДТП.</div>
+{% else %}
+    <section class="card mb-4">
+        <div class="card-body">
+            <div class="row g-4 align-items-start">
+                <div class="col-lg-6">
+                    <h2 class="h5">Присоединиться как второй водитель</h2>
+                    <p class="text-muted">Введите код, который вам передал первый водитель.</p>
+                    <form method="post" action="{% url 'accidents:driver_join' %}" class="d-flex flex-wrap gap-2">
+                        {% csrf_token %}
+                        <div class="flex-grow-1">
+                            {{ join_form.driver_join_code }}
+                        </div>
+                        <button class="btn btn-primary" type="submit">Присоединиться</button>
+                    </form>
+                </div>
+                <div class="col-lg-6">
+                    <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                        <h2 class="h5 mb-0">Мои машины в профиле</h2>
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'users:vehicle_add' %}">Добавить машину</a>
+                    </div>
+                    {% if registered_vehicles %}
+                        <ul class="list-group list-group-flush">
+                            {% for vehicle in registered_vehicles %}
+                                <li class="list-group-item px-0">
+                                    <strong>{{ vehicle.brand }} {{ vehicle.model }}</strong>,
+                                    {{ vehicle.license_plate }} · {{ vehicle.insurance_policy }}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="text-muted">Машины в профиле пока не указаны.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
 {% endif %}
 
 <section class="mb-4">

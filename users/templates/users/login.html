@@ -3,31 +3,31 @@
 {% block title %}Вход{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-7 col-lg-5">
-        <div class="page-heading mb-3">
-            <h1 class="h3 mb-1">Вход в систему</h1>
-            <p class="text-muted mb-0">Используйте имя пользователя и пароль водителя или сотрудника ГИБДД.</p>
-        </div>
-        <div class="card">
-            <div class="card-body">
-                <form method="post" novalidate>
-                    {% csrf_token %}
-                    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
-                    {% for field in form %}
-                        <div class="mb-3">
-                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                            {{ field }}
-                            {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-                        </div>
-                    {% endfor %}
-                    {% if form.non_field_errors %}
-                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
-                    {% endif %}
-                    <button class="btn btn-primary w-100" type="submit">Войти</button>
-                </form>
-            </div>
-        </div>
+<div class="app-screen">
+    <div class="screen-topbar">
+        <a class="back-link" href="{% url 'accidents:home' %}" aria-label="Назад">←</a>
+        <a class="topbar-action" href="{% url 'accidents:home' %}">Отменить</a>
     </div>
+
+    <h1 class="screen-title">Войти</h1>
+    <p class="screen-subtitle">Используйте логин и пароль водителя или сотрудника ГИБДД.</p>
+
+    <form method="post" novalidate class="form-flow">
+        {% csrf_token %}
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+        <section class="input-panel">
+            {% for field in form %}
+                <div class="mb-3">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                </div>
+            {% endfor %}
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+        </section>
+        <button class="btn btn-primary btn-action" type="submit">Войти <span>→</span></button>
+    </form>
 </div>
 {% endblock %}

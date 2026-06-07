@@ -1,69 +1,37 @@
 {% extends "base.html" %}
 
-{% block title %}Главная — Электронная фиксация ДТП{% endblock %}
+{% block title %}Европротокол{% endblock %}
 
 {% block content %}
-<section class="app-hero rounded-3 p-4 p-lg-5 mb-4">
-    <div class="row align-items-center g-4">
-        <div class="col-lg-8">
-            <p class="text-uppercase text-primary fw-semibold small mb-2">Электронный европротокол</p>
-            <h1 class="display-6 fw-bold mb-3">Фиксация ДТП, комментариев водителей, повреждений, фотографий и свидетельских показаний</h1>
-            <p class="lead mb-4">Водители создают карточку происшествия, добавляют второго участника и подтверждают готовность, а свидетели оставляют показания по коду доступа без регистрации.</p>
-            <div class="d-flex flex-wrap gap-2">
-                {% if request.user.is_authenticated %}
-                    {% if request.user.is_staff %}
-                        <a class="btn btn-primary btn-lg" href="{% url 'accidents:gibdd_list' %}">Открыть все ДТП</a>
-                    {% else %}
-                        <a class="btn btn-primary btn-lg" href="{% url 'accidents:accident_list' %}">Перейти к моим ДТП</a>
-                        <a class="btn btn-outline-primary btn-lg" href="{% url 'accidents:create' %}">Создать ДТП</a>
-                    {% endif %}
-                {% else %}
-                    <a class="btn btn-primary btn-lg" href="{% url 'users:register' %}">Зарегистрироваться</a>
-                    <a class="btn btn-outline-primary btn-lg" href="{% url 'users:login' %}">Войти</a>
-                    <a class="btn btn-outline-dark btn-lg" href="{% url 'users:login' %}?next={% url 'accidents:gibdd_list' %}">Вход ГИБДД</a>
-                {% endif %}
-                <a class="btn btn-warning btn-lg" href="{% url 'accidents:witness_code' %}">Я свидетель</a>
-            </div>
-        </div>
-        <div class="col-lg-4">
-            <div class="hero-panel">
-                <div class="fw-semibold mb-3">Что фиксируется</div>
-                <ul class="list-unstyled mb-0">
-                    <li>Дата и место ДТП</li>
-                    <li>Водители, роли и комментарии</li>
-                    <li>Повреждения и фотографии</li>
-                    <li>Показания свидетелей</li>
-                    <li>Отправка в ГИБДД</li>
-                </ul>
-            </div>
-        </div>
-    </div>
-</section>
+<div class="app-screen">
+    <h1 class="screen-title">Что вас интересует?</h1>
 
-<div class="row g-3">
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body">
-                <h2 class="h5">Водитель</h2>
-                <p class="text-muted mb-0">Создает карточку ДТП, добавляет второго водителя, автомобили, повреждения, фотографии и подтверждает готовность.</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body">
-                <h2 class="h5">Свидетель</h2>
-                <p class="text-muted mb-0">Вводит код доступа, видит краткую информацию о ДТП и отправляет свои показания без регистрации.</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body">
-                <h2 class="h5">Сотрудник ГИБДД</h2>
-                <p class="text-muted mb-0">Входит по заранее созданному аккаунту, видит все ДТП, сортирует список и открывает полную карточку с фотографиями.</p>
-            </div>
-        </div>
-    </div>
+    <section class="input-panel mb-3">
+        <h2 class="h6 fw-bold mb-3">Электронный европротокол</h2>
+        <ul class="mb-4 ps-3 text-muted">
+            <li>Создание карточки ДТП</li>
+            <li>Подключение второго водителя по коду</li>
+            <li>Комментарии, автомобили и повреждения</li>
+        </ul>
+        {% if request.user.is_authenticated %}
+            {% if request.user.is_staff %}
+                <a class="btn btn-primary btn-action" href="{% url 'accidents:gibdd_dashboard' %}">Открыть дашборд <span>→</span></a>
+            {% else %}
+                <a class="btn btn-primary btn-action" href="{% url 'accidents:accident_list' %}">Оформить <span>→</span></a>
+            {% endif %}
+        {% else %}
+            <a class="btn btn-primary btn-action" href="{% url 'users:register' %}">Оформить <span>→</span></a>
+        {% endif %}
+    </section>
+
+    <section class="input-panel">
+        <h2 class="h6 fw-bold mb-3">Свидетельское показание</h2>
+        <ul class="mb-4 ps-3 text-muted">
+            <li>Ввод кода доступа</li>
+            <li>Контакты свидетеля</li>
+            <li>Описание обстоятельств</li>
+        </ul>
+        <a class="btn btn-secondary-soft btn-action" href="{% url 'accidents:witness_code' %}">Оставить показание <span>→</span></a>
+    </section>
 </div>
 {% endblock %}

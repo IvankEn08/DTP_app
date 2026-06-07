@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Дашборд ГИБДД{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1 class="h3 mb-1">Дашборд сотрудника ГИБДД</h1>
+        <p class="text-muted mb-0">Агрегированные показатели по карточкам ДТП, участникам, повреждениям и отправкам.</p>
+    </div>
+    <a class="btn btn-outline-primary" href="{% url 'accidents:gibdd_list' %}">Все ДТП</a>
+</div>
+
+<section class="row g-3 mb-4">
+    <div class="col-md-4 col-xl-2">
+        <div class="card h-100"><div class="card-body"><div class="text-muted small">Всего ДТП</div><div class="display-6">{{ total_accidents }}</div></div></div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+        <div class="card h-100"><div class="card-body"><div class="text-muted small">Отправлено</div><div class="display-6">{{ submitted_accidents }}</div></div></div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+        <div class="card h-100"><div class="card-body"><div class="text-muted small">Не отправлено</div><div class="display-6">{{ not_submitted_accidents }}</div></div></div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+        <div class="card h-100"><div class="card-body"><div class="text-muted small">Водители</div><div class="display-6">{{ total_drivers }}</div></div></div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+        <div class="card h-100"><div class="card-body"><div class="text-muted small">Автомобили</div><div class="display-6">{{ total_vehicles }}</div></div></div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+        <div class="card h-100"><div class="card-body"><div class="text-muted small">Свидетели</div><div class="display-6">{{ total_witnesses }}</div></div></div>
+    </div>
+</section>
+
+<section class="row g-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="h5">ДТП по месяцам</h2>
+                <canvas id="monthlyChart" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="h5">Статус отправки</h2>
+                <canvas id="statusChart" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="h5">Повреждения по степени</h2>
+                <canvas id="severityChart" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="h5">Популярные марки авто</h2>
+                <canvas id="brandChart" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+const monthlyLabels = {{ monthly_labels|safe }};
+const monthlyValues = {{ monthly_values|safe }};
+const statusValues = {{ status_values|safe }};
+const severityLabels = {{ severity_labels|safe }};
+const severityValues = {{ severity_values|safe }};
+const brandLabels = {{ brand_labels|safe }};
+const brandValues = {{ brand_values|safe }};
+
+new Chart(document.getElementById('monthlyChart'), {
+    type: 'bar',
+    data: { labels: monthlyLabels, datasets: [{ label: 'ДТП', data: monthlyValues, backgroundColor: '#0d6efd' }] },
+});
+new Chart(document.getElementById('statusChart'), {
+    type: 'doughnut',
+    data: { labels: ['Отправлено', 'Не отправлено'], datasets: [{ data: statusValues, backgroundColor: ['#198754', '#6c757d'] }] },
+});
+new Chart(document.getElementById('severityChart'), {
+    type: 'pie',
+    data: { labels: severityLabels, datasets: [{ data: severityValues, backgroundColor: ['#20c997', '#ffc107', '#dc3545'] }] },
+});
+new Chart(document.getElementById('brandChart'), {
+    type: 'bar',
+    data: { labels: brandLabels, datasets: [{ label: 'Автомобили', data: brandValues, backgroundColor: '#6610f2' }] },
+    options: { indexAxis: 'y' }
+});
+</script>
+{% endblock %}
