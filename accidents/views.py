@@ -1,9 +1,16 @@
+import io
+import json
+from pathlib import Path
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import HttpResponseForbidden
+from django.db.models import Count, Q
+from django.db.models.functions import TruncMonth
+from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from PIL import Image, ImageDraw, ImageFont
 
 from users.models import DriverProfile
 from .forms import (
@@ -12,13 +19,14 @@ from .forms import (
     AccidentPhotoForm,
     AccidentUpdateForm,
     DamageForm,
+    DriverJoinCodeForm,
     DriverCommentForm,
     SubmissionConfirmForm,
     VehicleForm,
     WitnessCodeForm,
     WitnessStatementForm,
 )
-from .models import Accident, AccidentDriver, SubmissionLog, Vehicle
+from .models import Accident, AccidentDriver, Damage, SubmissionLog, Vehicle, WitnessStatement
 
 
 def home(request):
@@ -98,8 +106,10 @@ def user_can_submit(user, accident):
         return False
     if not accident_drivers_are_ready(accident):
         return False
+    if is_gibdd_staff(user):
+        return True
     participant = get_user_participant(user, accident)
-    return participant is not None and participant.role == AccidentDriver.Role.VICTIM
+    return participant is not None and participant.role == AccidentDriver.Role.RESPONSIBLE
 
 
 def submit_blocker_message(user, accident):
@@ -109,11 +119,13 @@ def submit_blocker_message(user, accident):
         return "Для отправки нужно добавить двух водителей-участников."
     if not accident_drivers_are_ready(accident):
         return "Отправка станет доступна после подтверждения заполнения обоими водителями."
+    if is_gibdd_staff(user):
+        return ""
     participant = get_user_participant(user, accident)
     if participant is None:
         return "Отправить заявление может только участник ДТП."
-    if participant.role != AccidentDriver.Role.VICTIM:
-        return "Отправить заявление может только водитель с ролью «Пострадавший»."
+    if participant.role != AccidentDriver.Role.RESPONSIBLE:
+        return "Отправить заявление может только водитель с ролью «Виновник»."
     return ""
 
 
@@ -127,21 +139,127 @@ def get_accessible_accident(user, pk):
     return accident
 
 
-@login_required
-def accident_list(request):
-    if is_gibdd_staff(request.user):
-        return redirect("accidents:gibdd_list")
-
-    profile = get_driver_profile(request.user)
-    created_accidents = Accident.objects.filter(created_by=request.user)
+def get_driver_visible_accidents(user, profile):
+    created_accidents = Accident.objects.filter(created_by=user)
     participant_accidents = Accident.objects.none()
-
     if profile:
         participant_accidents = (
             Accident.objects.filter(drivers__driver=profile)
-            .exclude(created_by=request.user)
+            .exclude(created_by=user)
             .distinct()
         )
+    return created_accidents, participant_accidents
+
+
+def certificate_font(size, bold=False):
+    font_name = "arialbd.ttf" if bold else "arial.ttf"
+    font_path = Path("C:/Windows/Fonts") / font_name
+    if font_path.exists():
+        return ImageFont.truetype(str(font_path), size)
+    return ImageFont.load_default()
+
+
+def draw_centered_text(draw, box, text_value, font, fill):
+    left, top, right, bottom = box
+    words = text_value.split()
+    lines = []
+    current = ""
+    max_width = right - left
+    for word in words:
+        candidate = word if not current else f"{current} {word}"
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            current = candidate
+        else:
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    line_height = font.size + 8 if hasattr(font, "size") else 28
+    total_height = len(lines) * line_height
+    y = top + ((bottom - top) - total_height) / 2
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font)
+        x = left + (max_width - (bbox[2] - bbox[0])) / 2
+        draw.text((x, y), line, font=font, fill=fill)
+        y += line_height
+
+
+def build_driver_certificate(profile, accidents):
+    width, height = 1754, 1240
+    image = Image.new("RGB", (width, height), "#e9f8ff")
+    draw = ImageDraw.Draw(image)
+
+    title_font = certificate_font(54, True)
+    subtitle_font = certificate_font(34, False)
+    name_font = certificate_font(46, True)
+    text_font = certificate_font(30, False)
+    small_font = certificate_font(23, False)
+    count = accidents.count()
+
+    draw.rectangle((0, 760, width, height), fill="#b7ec8f")
+    draw.polygon([(0, 930), (width, 820), (width, height), (0, height)], fill="#77d861")
+    draw.polygon([(700, height), (1055, height), (960, 760), (805, 760)], fill="#4b4b4b")
+    for y in range(805, height, 92):
+        draw.rectangle((866, y, 892, y + 48), fill="#fff6a8")
+
+    draw.ellipse((1325, 95, 1545, 315), fill="#ffd23f", outline="#f4a900", width=7)
+    for angle_x, angle_y in ((1285, 145), (1552, 155), (1350, 45), (1490, 40), (1310, 305), (1535, 302)):
+        draw.line((1435, 205, angle_x, angle_y), fill="#ffd23f", width=10)
+    draw.ellipse((1380, 170, 1415, 205), fill="#442800")
+    draw.ellipse((1470, 170, 1505, 205), fill="#442800")
+    draw.arc((1405, 190, 1490, 255), 10, 170, fill="#442800", width=6)
+
+    for cloud in ((155, 125, 360, 215), (440, 95, 680, 190), (1125, 120, 1305, 205)):
+        x1, y1, x2, y2 = cloud
+        draw.ellipse((x1, y1 + 35, x1 + 100, y2), fill="white")
+        draw.ellipse((x1 + 60, y1, x1 + 180, y2), fill="white")
+        draw.ellipse((x1 + 145, y1 + 30, x2, y2), fill="white")
+        draw.rectangle((x1 + 45, y1 + 75, x2 - 35, y2), fill="white")
+
+    colors = ["#ff5b6e", "#36c2ff", "#ffe156", "#7bd88f", "#c084fc"]
+    for index, color in enumerate(colors):
+        x = 175 + index * 70
+        y = 285 + (index % 2) * 35
+        draw.ellipse((x, y, x + 55, y + 75), fill=color, outline="#ffffff", width=3)
+        draw.line((x + 28, y + 75, x + 10, y + 150), fill="#888888", width=2)
+
+    draw.rounded_rectangle((110, 95, width - 110, height - 95), radius=46, outline="#f7b733", width=12)
+    draw.rounded_rectangle((145, 130, width - 145, height - 130), radius=34, outline="#ffffff", width=8)
+    draw.rounded_rectangle((190, 355, width - 190, 1080), radius=36, fill="#fffdf4", outline="#f2c94c", width=5)
+    draw.rectangle((250, 355, width - 250, 430), fill="#ff6f61")
+    draw.polygon([(190, 355), (250, 355), (250, 430), (190, 455)], fill="#d94f45")
+    draw.polygon([(width - 190, 355), (width - 250, 355), (width - 250, 430), (width - 190, 455)], fill="#d94f45")
+
+    draw_centered_text(draw, (240, 370, width - 240, 430), "ПОЧЁТНАЯ ГРАМОТА", title_font, "#ffffff")
+    draw_centered_text(draw, (180, 170, width - 180, 310), "Справка по истории ДТП", subtitle_font, "#1f3b57")
+    draw_centered_text(draw, (240, 475, width - 240, 565), profile.full_name, name_font, "#111111")
+    draw_centered_text(draw, (290, 595, width - 290, 705), f"За всё время у вас целых {count} аварий. Так держать!", text_font, "#333333")
+
+    y = 760
+    draw.text((300, y), "Последние карточки ДТП:", font=text_font, fill="#1f3b57")
+    y += 55
+    for accident in accidents.order_by("-accident_date")[:5]:
+        line = f"{accident.accident_date:%d.%m.%Y} — {accident.title} — {accident.location}"
+        draw.text((280, y), line[:95], font=small_font, fill="#333333")
+        y += 36
+    if count == 0:
+        draw.text((280, y), "Пока ни одной аварии. История ДТП пуста.", font=small_font, fill="#333333")
+
+    buffer = io.BytesIO()
+    image.save(buffer, format="PDF", resolution=150.0)
+    buffer.seek(0)
+    return buffer
+
+
+@login_required
+def accident_list(request):
+    if is_gibdd_staff(request.user):
+        return redirect("accidents:gibdd_dashboard")
+
+    profile = get_driver_profile(request.user)
+    created_accidents, participant_accidents = get_driver_visible_accidents(request.user, profile)
 
     return render(
         request,
@@ -150,8 +268,129 @@ def accident_list(request):
             "profile": profile,
             "created_accidents": created_accidents,
             "participant_accidents": participant_accidents,
+            "join_form": DriverJoinCodeForm(),
+            "registered_vehicles": profile.registered_vehicles.all() if profile else [],
         },
     )
+
+
+@login_required
+def driver_join(request):
+    if is_gibdd_staff(request.user):
+        return redirect("accidents:gibdd_dashboard")
+    profile = get_driver_profile(request.user)
+    if not profile:
+        messages.error(request, "Для присоединения к ДТП нужен профиль водителя.")
+        return redirect("accidents:accident_list")
+    if request.method != "POST":
+        return redirect("accidents:accident_list")
+
+    form = DriverJoinCodeForm(request.POST)
+    if form.is_valid():
+        code = form.cleaned_data["driver_join_code"]
+        accident = Accident.objects.filter(driver_join_code=code).first()
+        if not accident:
+            messages.error(request, "ДТП с таким кодом второго водителя не найдено.")
+            return redirect("accidents:accident_list")
+        if accident.is_submitted:
+            messages.error(request, "Это ДТП уже отправлено в ГИБДД.")
+            return redirect("accidents:accident_list")
+        if accident.drivers.filter(driver=profile).exists():
+            messages.info(request, "Вы уже являетесь участником этого ДТП.")
+            return redirect("accidents:detail", pk=accident.pk)
+        if accident.drivers.count() >= 2:
+            messages.error(request, "В этом ДТП уже указаны два водителя.")
+            return redirect("accidents:accident_list")
+        with transaction.atomic():
+            accident = Accident.objects.select_for_update().get(pk=accident.pk)
+            first_participant = accident.drivers.select_for_update().first()
+            if first_participant:
+                first_participant.role = opposite_role(accident.second_driver_role)
+                first_participant.is_ready = False
+                first_participant.ready_at = None
+                first_participant.save(update_fields=["role", "is_ready", "ready_at"])
+            AccidentDriver.objects.create(
+                accident=accident,
+                driver=profile,
+                role=accident.second_driver_role,
+            )
+        messages.success(request, "Вы присоединились к ДТП. Проверьте данные и заполните свой комментарий.")
+        return redirect("accidents:detail", pk=accident.pk)
+
+    for error in form.errors.values():
+        messages.error(request, error)
+    return redirect("accidents:accident_list")
+
+
+@login_required
+def driver_accidents_certificate(request):
+    if is_gibdd_staff(request.user):
+        return redirect("accidents:gibdd_dashboard")
+    profile = get_driver_profile(request.user)
+    if not profile:
+        messages.error(request, "Для экспорта нужен профиль водителя.")
+        return redirect("accidents:accident_list")
+    accidents = Accident.objects.filter(Q(created_by=request.user) | Q(drivers__driver=profile)).distinct()
+    buffer = build_driver_certificate(profile, accidents)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = 'attachment; filename="dtp_certificate.pdf"'
+    return response
+
+
+@login_required
+def gibdd_dashboard(request):
+    if not is_gibdd_staff(request.user):
+        return HttpResponseForbidden("Доступ разрешен только сотруднику ГИБДД.")
+
+    accidents = Accident.objects.all()
+    total_accidents = accidents.count()
+    submitted_accidents = accidents.filter(submitted_at__isnull=False).count()
+    not_submitted_accidents = total_accidents - submitted_accidents
+    total_drivers = DriverProfile.objects.count()
+    total_vehicles = Vehicle.objects.count()
+    total_witnesses = WitnessStatement.objects.count()
+
+    monthly_rows = (
+        accidents.annotate(month=TruncMonth("accident_date"))
+        .values("month")
+        .annotate(total=Count("id"))
+        .order_by("month")
+    )
+    monthly_labels = [row["month"].strftime("%m.%Y") for row in monthly_rows if row["month"]]
+    monthly_values = [row["total"] for row in monthly_rows if row["month"]]
+
+    severity_rows = (
+        Damage.objects.values("severity")
+        .annotate(total=Count("id"))
+        .order_by("severity")
+    )
+    severity_labels = [dict(Damage.Severity.choices).get(row["severity"], row["severity"]) for row in severity_rows]
+    severity_values = [row["total"] for row in severity_rows]
+
+    brand_rows = (
+        Vehicle.objects.values("brand")
+        .annotate(total=Count("id"))
+        .order_by("-total", "brand")[:8]
+    )
+    brand_labels = [row["brand"] for row in brand_rows]
+    brand_values = [row["total"] for row in brand_rows]
+
+    context = {
+        "total_accidents": total_accidents,
+        "submitted_accidents": submitted_accidents,
+        "not_submitted_accidents": not_submitted_accidents,
+        "total_drivers": total_drivers,
+        "total_vehicles": total_vehicles,
+        "total_witnesses": total_witnesses,
+        "monthly_labels": json.dumps(monthly_labels, ensure_ascii=False),
+        "monthly_values": json.dumps(monthly_values),
+        "status_values": json.dumps([submitted_accidents, not_submitted_accidents]),
+        "severity_labels": json.dumps(severity_labels, ensure_ascii=False),
+        "severity_values": json.dumps(severity_values),
+        "brand_labels": json.dumps(brand_labels, ensure_ascii=False),
+        "brand_values": json.dumps(brand_values),
+    }
+    return render(request, "accidents/gibdd_dashboard.html", context)
 
 
 @login_required
@@ -198,16 +437,17 @@ def accident_create(request):
     if request.method == "POST":
         form = AccidentCreateForm(request.POST)
         if form.is_valid():
-            accident = form.save(commit=False)
-            accident.created_by = request.user
-            accident.save()
-            AccidentDriver.objects.create(
-                accident=accident,
-                driver=profile,
-                role=AccidentDriver.Role.VICTIM,
-                comment=form.cleaned_data["driver_comment"],
-            )
-            messages.success(request, "Карточка ДТП создана. Добавьте второго водителя и дождитесь подтверждения обоих участников.")
+            with transaction.atomic():
+                accident = form.save(commit=False)
+                accident.created_by = request.user
+                accident.save()
+                AccidentDriver.objects.create(
+                    accident=accident,
+                    driver=profile,
+                    role=AccidentDriver.Role.VICTIM,
+                    comment=form.cleaned_data["driver_comment"],
+                )
+            messages.success(request, "Карточка ДТП создана. Добавьте автомобиль, второго водителя и дождитесь подтверждения обоих участников.")
             return redirect("accidents:detail", pk=accident.pk)
     else:
         form = AccidentCreateForm()
@@ -220,6 +460,8 @@ def accident_detail(request, pk):
     accident = get_accessible_accident(request.user, pk)
     if accident is None:
         return HttpResponseForbidden("У вас нет доступа к этому ДТП.")
+    if not accident.driver_join_code and not accident.is_submitted:
+        accident.save(update_fields=["driver_join_code", "updated_at"])
 
     drivers = accident.drivers.select_related("driver", "driver__user")
     vehicles = accident.vehicles.select_related("owner").prefetch_related("damages")
@@ -318,15 +560,15 @@ def accident_driver_add(request, pk):
                 existing_participant.is_ready = False
                 existing_participant.ready_at = None
                 existing_participant.save(update_fields=["role", "is_ready", "ready_at"])
-                AccidentDriver.objects.create(
-                    accident=accident,
-                    driver=form.cleaned_data["driver"],
-                    role=second_role,
-                )
-            messages.success(request, "Второй водитель добавлен. Оба водителя должны подтвердить готовность перед отправкой.")
+                accident.second_driver_role = second_role
+                if not accident.driver_join_code:
+                    accident.save(update_fields=["second_driver_role", "driver_join_code", "updated_at"])
+                else:
+                    accident.save(update_fields=["second_driver_role", "updated_at"])
+            messages.success(request, "Код второго водителя подготовлен. Передайте его зарегистрированному водителю.")
             return redirect("accidents:detail", pk=accident.pk)
     else:
-        form = AccidentDriverForm(accident=accident)
+        form = AccidentDriverForm(accident=accident, initial={"role": accident.second_driver_role})
 
     return render(request, "accidents/driver_form.html", {"form": form, "accident": accident})
 
@@ -393,13 +635,16 @@ def vehicle_add(request, pk):
         messages.error(request, "Добавление автомобиля недоступно.")
         return redirect("accidents:detail", pk=accident.pk)
 
-    owners = DriverProfile.objects.filter(accident_roles__accident=accident).distinct()
     profile = get_driver_profile(request.user)
-    if accident.created_by_id != request.user.id:
-        owners = owners.filter(pk=profile.pk) if profile else owners.none()
+    if not profile:
+        messages.error(request, "Для добавления автомобиля нужен профиль водителя.")
+        return redirect("accidents:detail", pk=accident.pk)
+    if not profile.registered_vehicles.exists():
+        messages.error(request, "Сначала добавьте автомобиль в свой профиль.")
+        return redirect("users:vehicle_add")
 
     if request.method == "POST":
-        form = VehicleForm(request.POST, owners_queryset=owners)
+        form = VehicleForm(request.POST, owner_profile=profile)
         if form.is_valid():
             vehicle = form.save(commit=False)
             vehicle.accident = accident
@@ -408,7 +653,7 @@ def vehicle_add(request, pk):
             messages.success(request, "Автомобиль добавлен.")
             return redirect("accidents:detail", pk=accident.pk)
     else:
-        form = VehicleForm(owners_queryset=owners)
+        form = VehicleForm(owner_profile=profile)
 
     return render(request, "accidents/vehicle_form.html", {"form": form, "accident": accident})
 
@@ -422,10 +667,8 @@ def damage_add(request, pk):
         messages.error(request, "Добавление повреждения недоступно.")
         return redirect("accidents:detail", pk=accident.pk)
 
-    vehicles = Vehicle.objects.filter(accident=accident).select_related("owner")
     profile = get_driver_profile(request.user)
-    if accident.created_by_id != request.user.id:
-        vehicles = vehicles.filter(owner=profile) if profile else vehicles.none()
+    vehicles = Vehicle.objects.filter(accident=accident, owner=profile).select_related("owner") if profile else Vehicle.objects.none()
 
     if not vehicles.exists():
         messages.error(request, "Сначала добавьте автомобиль.")
@@ -450,10 +693,14 @@ def photo_add(request, pk):
     if accident is None:
         return HttpResponseForbidden("У вас нет доступа к этому ДТП.")
     if not user_can_modify_data(request.user, accident):
-        messages.error(request, "Загрузка фотографий недоступна.")
+        messages.error(request, "Добавление фотографий недоступно.")
         return redirect("accidents:detail", pk=accident.pk)
 
-    vehicles = Vehicle.objects.filter(accident=accident).select_related("owner")
+    profile = get_driver_profile(request.user)
+    if profile:
+        vehicles = Vehicle.objects.filter(accident=accident, owner=profile).select_related("owner")
+    else:
+        vehicles = Vehicle.objects.filter(accident=accident).select_related("owner")
 
     if request.method == "POST":
         form = AccidentPhotoForm(request.POST, request.FILES, vehicles_queryset=vehicles)
@@ -466,7 +713,7 @@ def photo_add(request, pk):
                 reset_driver_ready(accident, photo.vehicle.owner)
             else:
                 reset_participant_ready(get_user_participant(request.user, accident))
-            messages.success(request, "Фотография загружена.")
+            messages.success(request, "Фотография добавлена.")
             return redirect("accidents:detail", pk=accident.pk)
     else:
         form = AccidentPhotoForm(vehicles_queryset=vehicles)
