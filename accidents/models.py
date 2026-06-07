@@ -8,19 +8,34 @@ from django.db import models
 from users.models import DriverProfile
 
 
-def generate_access_code():
+def generate_unique_code(field_name):
     alphabet = string.ascii_uppercase + string.digits
     while True:
         code = "".join(secrets.choice(alphabet) for _ in range(8))
-        if not Accident.objects.filter(access_code=code).exists():
+        if not Accident.objects.filter(**{field_name: code}).exists():
             return code
 
 
+def generate_access_code():
+    return generate_unique_code("access_code")
+
+
+def generate_driver_join_code():
+    return generate_unique_code("driver_join_code")
+
+
 class Accident(models.Model):
+    SECOND_DRIVER_ROLE_CHOICES = (
+        ("responsible", "Виновник"),
+        ("victim", "Пострадавший"),
+    )
+
     title = models.CharField("Краткое название происшествия", max_length=255)
     accident_date = models.DateTimeField("Дата и время ДТП")
     location = models.CharField("Место происшествия", max_length=255)
     access_code = models.CharField("Код доступа для свидетелей", max_length=8, unique=True, blank=True)
+    driver_join_code = models.CharField("Код присоединения второго водителя", max_length=8, unique=True, blank=True, null=True)
+    second_driver_role = models.CharField("Роль второго водителя по коду", max_length=20, choices=SECOND_DRIVER_ROLE_CHOICES, default="responsible")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="created_accidents", verbose_name="Создатель")
     submitted_at = models.DateTimeField("Дата и время отправки в ГИБДД", null=True, blank=True)
     created_at = models.DateTimeField("Дата создания", auto_now_add=True)
@@ -34,6 +49,8 @@ class Accident(models.Model):
     def save(self, *args, **kwargs):
         if not self.access_code:
             self.access_code = generate_access_code()
+        if not self.driver_join_code:
+            self.driver_join_code = generate_driver_join_code()
         super().save(*args, **kwargs)
 
     @property
@@ -71,7 +88,8 @@ class AccidentDriver(models.Model):
 
 class Vehicle(models.Model):
     accident = models.ForeignKey(Accident, on_delete=models.CASCADE, related_name="vehicles", verbose_name="ДТП")
-    owner = models.ForeignKey(DriverProfile, on_delete=models.CASCADE, related_name="vehicles", verbose_name="Владелец")
+    owner = models.ForeignKey(DriverProfile, on_delete=models.CASCADE, related_name="accident_vehicles", verbose_name="Водитель")
+    owner_name = models.CharField("Владелец", max_length=255, blank=True)
     brand = models.CharField("Марка", max_length=100)
     model = models.CharField("Модель", max_length=100)
     year = models.PositiveIntegerField("Год выпуска", validators=[MinValueValidator(1900), MaxValueValidator(2100)])
@@ -88,6 +106,10 @@ class Vehicle(models.Model):
 
     def __str__(self):
         return f"{self.brand} {self.model} ({self.license_plate})"
+
+    @property
+    def display_owner_name(self):
+        return self.owner_name or self.owner.full_name
 
 
 class Damage(models.Model):
@@ -115,8 +137,8 @@ class AccidentPhoto(models.Model):
     accident = models.ForeignKey(Accident, on_delete=models.CASCADE, related_name="photos", verbose_name="ДТП")
     vehicle = models.ForeignKey(Vehicle, on_delete=models.SET_NULL, null=True, blank=True, related_name="photos", verbose_name="Автомобиль")
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="uploaded_accident_photos", verbose_name="Загрузил")
-    image = models.ImageField("Изображение", upload_to="accident_photos/%Y/%m/%d/")
-    description = models.CharField("Описание фотографии", max_length=255, blank=True)
+    image = models.ImageField("Фотография", upload_to="accident_photos/%Y/%m/%d/")
+    description = models.CharField("Описание", max_length=255, blank=True)
     created_at = models.DateTimeField("Дата загрузки", auto_now_add=True)
 
     class Meta:
